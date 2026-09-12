@@ -178,7 +178,7 @@ details[open] .chev{transform:rotate(90deg);}
 .chart{width:100%;overflow-x:auto;}
 .chart svg text{font-family:var(--font-mono);fill:var(--text-dim);}
 
-.merge-grid{display:grid;grid-template-columns:96px repeat(7,1fr);gap:6px;align-items:center;}
+.merge-grid{display:grid;gap:4px;align-items:center;}
 .merge-grid .mg-cell{text-align:center;min-height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
 
 @media (max-width:760px){
@@ -282,7 +282,7 @@ const ICONS={
 
 let dbApi=null, usingLocalFallback=false, booted=false;
 let sessions=[], customExercises=[], people=[];
-let state={view:'dashboard', activeSessionId:null, currentPersonId:null, pickingTarget:false, startingMuscles:[], progressExerciseId:null, progressPersonId:null, historyPersonFilter:'all', pickerQuery:'', saveStatus:'idle', loaded:false, addingPerson:false, newPersonName:'', addPersonError:'', confirmDiscard:false, confirmDeleteId:null};
+let state={view:'dashboard', activeSessionId:null, currentPersonId:null, pickingTarget:false, startingMuscles:[], progressExerciseId:null, progressPersonId:null, historyPersonFilter:'all', pickerQuery:'', saveStatus:'idle', loaded:false, addingPerson:false, newPersonName:'', addPersonError:'', confirmDiscard:false, confirmDeleteId:null, mergeMonthKey:null};
 let saveTimer=null;
 const LS_SESSIONS='ironlog_sessions_v3', LS_EXERCISES='ironlog_exercises_v3', LS_PEOPLE='ironlog_people_v3', LS_CURRENT_PERSON='ironlog_current_person_v3', LS_SEEDED='ironlog_seeded_v3';
 
@@ -426,12 +426,18 @@ function worstMuscle(scores){
   for(const g of MUSCLE_GROUPS){if(scores[g]<worstVal){worstVal=scores[g];worst=g;}}
   return worst;
 }
-function weekDates(){
-  const monday=startOfWeekISO(new Date());
+function monthKeyOf(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function currentMonthKey(){return monthKeyOf(new Date());}
+function monthKeyAt(offset){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+offset);return monthKeyOf(d);}
+function lastMonthKeys(n){const arr=[];for(let i=0;i<n;i++)arr.push(monthKeyAt(-i));return arr;}
+function monthDates(monthKey){
+  const p=monthKey.split('-').map(Number),y=p[0],m=p[1];
+  const daysInMonth=new Date(y,m,0).getDate();
   const days=[];
-  for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);days.push(ymd(d));}
+  for(let d=1;d<=daysInMonth;d++){days.push(y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'));}
   return days;
 }
+function fmtMonthLabel(monthKey){const p=monthKey.split('-').map(Number);return new Date(p[0],p[1]-1,1).toLocaleDateString(undefined,{month:'short',year:'numeric'});}
 function musclesForPersonOnDate(personId,dateStr){
   const set=new Set();
   for(const s of sessions){
@@ -781,23 +787,31 @@ function renderHistory(){
   return head+body;
 }
 
-function renderWeekMergeCard(){
+function renderMergeCard(){
   if(!people.length)return '';
-  const days=weekDates();
+  const monthKey=state.mergeMonthKey||currentMonthKey();
+  const isCurrentMonth=monthKey===currentMonthKey();
+  const months=lastMonthKeys(12);
+  const monthTabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px;">'+months.map(mk=>{
+    const active=mk===monthKey;
+    return '<button class="chip" data-action="select-merge-month" data-month="'+mk+'" style="flex-shrink:0;'+(active?'border-color:var(--accent);color:var(--accent-strong);':'')+'">'+fmtMonthLabel(mk)+'</button>';
+  }).join('')+'</div>';
+  const days=monthDates(monthKey);
   const today=todayISO();
-  const dayLabel=d=>{const p=d.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]).toLocaleDateString(undefined,{weekday:'short'});};
-  const header='<div class="merge-grid"><div></div>'+days.map(d=>'<div class="small muted mg-cell" style="font-weight:600;'+(d===today?'color:var(--accent-strong);':'')+'">'+dayLabel(d)+(d===today?' •':'')+'</div>').join('')+'</div>';
+  const dayLabel=d=>String(+d.slice(-2));
+  const cols='96px repeat('+days.length+', minmax(28px, 1fr))';
+  const header='<div class="merge-grid" style="grid-template-columns:'+cols+';"><div></div>'+days.map(d=>'<div class="small muted mg-cell" style="font-weight:600;'+(d===today?'color:var(--accent-strong);':'')+'">'+dayLabel(d)+(d===today?' •':'')+'</div>').join('')+'</div>';
   const rows=people.map(p=>{
     const cells=days.map(d=>{
       const muscles=musclesForPersonOnDate(p.id,d);
       if(!muscles.length)return '<div class="mg-cell small" style="color:var(--text-faint);">—</div>';
-      const shown=muscles.slice(0,2),extra=muscles.length-shown.length;
-      return '<div class="mg-cell">'+shown.map(g=>'<span style="font-size:10px;font-weight:700;color:'+muscleColor(g)+';">'+g+'</span>').join('')+(extra>0?'<span class="small muted">+'+extra+'</span>':'')+'</div>';
+      const shown=muscles.slice(0,1),extra=muscles.length-shown.length;
+      return '<div class="mg-cell" title="'+muscles.map(esc).join(', ')+'">'+shown.map(g=>'<span style="font-size:9px;font-weight:700;color:'+muscleColor(g)+';">'+g.slice(0,3)+'</span>').join('')+(extra>0?'<span style="font-size:8px;" class="muted">+'+extra+'</span>':'')+'</div>';
     }).join('');
-    return '<div class="merge-grid" style="padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;gap:6px;"><span class="cat-dot" style="background:'+personColor(p)+';"></span><span class="small" style="font-weight:600;">'+esc(p.name)+'</span></div>'+cells+'</div>';
+    return '<div class="merge-grid" style="grid-template-columns:'+cols+';padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;gap:6px;"><span class="cat-dot" style="background:'+personColor(p)+';"></span><span class="small" style="font-weight:600;">'+esc(p.name)+'</span></div>'+cells+'</div>';
   }).join('');
-  const suggestion=people.length>=2?suggestTogetherToday():null;
-  return '<div class="card"><div class="card-head"><div class="card-title">This Week, Merged</div><div class="small muted">What each of you has trained, day by day</div></div><div style="overflow-x:auto;"><div style="min-width:520px;">'+header+rows+'</div></div>'+(suggestion?'<div class="banner" style="margin-top:14px;"><span>'+suggestion+'</span></div>':'')+'</div>';
+  const suggestion=(isCurrentMonth&&people.length>=2)?suggestTogetherToday():null;
+  return '<div class="card"><div class="card-head"><div class="card-title">Training Calendar</div><div class="small muted">'+fmtMonthLabel(monthKey)+' · what each of you has trained, day by day</div></div>'+monthTabs+'<div style="overflow-x:auto;"><div style="min-width:'+(96+days.length*30)+'px;">'+header+rows+'</div></div>'+(suggestion?'<div class="banner" style="margin-top:14px;"><span>'+suggestion+'</span></div>':'')+'</div>';
 }
 function renderProgress(){
   if(!people.length)return '<div class="page-sub">Add someone to start tracking progress.</div>';
@@ -821,7 +835,7 @@ function renderProgress(){
   const select='<select data-role="progress-select" style="min-width:220px;">'+MUSCLE_GROUPS.filter(c=>grouped[c].length).map(cat=>'<optgroup label="'+cat+'">'+grouped[cat].map(e=>'<option value="'+e.id+'" '+(e.id===exId?'selected':'')+'>'+esc(e.name)+'</option>').join('')+'</optgroup>').join('')+'</select>';
   const logRows=points.length?('<div class="card"><div class="card-head"><div class="card-title">Session Log</div></div><div class="rowlist">'+[...points].reverse().map(p=>'<div class="row"><div class="small">'+fmtDateWeekday(p.date)+(p.sample?' <span class="pill pill-sample">Sample</span>':'')+'</div><div class="num mono small">'+(p.weight?fmtWeight(p.weight)+' × '+p.reps:p.reps+' reps')+'</div></div>').join('')+'</div></div>'):'';
   return '<div class="page-head"><div><div class="page-title">Progress</div><div class="page-sub">Find a day to train together, then track top sets exercise by exercise.</div></div></div>'+
-    renderWeekMergeCard()+
+    renderMergeCard()+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+personChips+'</div>'+
     '<div class="card"><div class="card-head"><div class="card-title">'+(ex?esc(ex.name):'')+'</div>'+(pr?'<div class="pill pill-pr">PR '+(metric==='reps'?pr.reps+' reps':fmtWeight(pr.weight)+' × '+pr.reps)+'</div>':'')+select+'</div><div class="chart">'+lineChart(points,metric)+'</div></div>'+
     logRows;
@@ -975,6 +989,7 @@ function onAppClick(e){
   else if(action==='cancel-add-person'){state.addingPerson=false;state.newPersonName='';state.addPersonError='';safeRender();}
   else if(action==='select-progress-person'){state.progressPersonId=el.dataset.pid;state.progressExerciseId=null;safeRender();}
   else if(action==='filter-history-person'){state.historyPersonFilter=el.dataset.pid;safeRender();}
+  else if(action==='select-merge-month'){state.mergeMonthKey=el.dataset.month;safeRender();}
 }
 function onAppInput(e){
   const t=e.target;
