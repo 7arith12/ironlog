@@ -194,6 +194,62 @@ details[open] .chev{transform:rotate(90deg);}
 
 <div id="app"></div>
 <script>
+window.__ironlogFirebaseReady = new Promise((resolve)=>{ window.__resolveFirebaseReady = resolve; });
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_FzT83ZMxRN_n-qZQ98vFXvjVMWFS1zI",
+  authDomain: "workout-d54d1.firebaseapp.com",
+  projectId: "workout-d54d1",
+  storageBucket: "workout-d54d1.firebasestorage.app",
+  messagingSenderId: "414100347478",
+  appId: "1:414100347478:web:09fb589badd4f54d2f79f7"
+};
+
+function wrapDocSnap(snap){
+  return { id: snap.id, exists: snap.exists(), data: ()=> snap.data() };
+}
+function wrapDocRef(ref){
+  return {
+    id: ref.id,
+    path: ref.path,
+    get: ()=> getDoc(ref).then(wrapDocSnap),
+    set: (data)=> setDoc(ref, data),
+    delete: ()=> deleteDoc(ref),
+    onSnapshot: (next, err)=> onSnapshot(ref, snap=>next(wrapDocSnap(snap)), err),
+  };
+}
+function wrapCollectionRef(dbInst, path){
+  const colRef = collection(dbInst, path);
+  return {
+    path,
+    doc: (id)=> wrapDocRef(id!=null ? doc(dbInst, path, id) : doc(colRef)),
+    onSnapshot: (next, err)=> onSnapshot(colRef, snap=>{
+      next({ docs: snap.docs.map(wrapDocSnap), empty: snap.empty });
+    }, err),
+  };
+}
+
+try{
+  const app = initializeApp(firebaseConfig);
+  const dbInst = getFirestore(app);
+  window.__resolveFirebaseReady({
+    collection: (path)=> wrapCollectionRef(dbInst, path),
+    doc: (path)=>{
+      const parts = path.split('/');
+      const id = parts.pop();
+      return wrapDocRef(doc(dbInst, parts.join('/'), id));
+    },
+  });
+}catch(e){
+  console.warn('Firebase init failed', e);
+  window.__resolveFirebaseReady(null);
+}
+</script>
+<script>
 const MUSCLE_GROUPS=['Chest','Back','Shoulders','Arms','Legs','Core'];
 const DEFAULT_EXERCISES=[
   {id:'back-squat',name:'Back Squat',muscleGroup:'Legs'},
@@ -956,7 +1012,7 @@ function afterDataChange(){
 async function boot(){
   if(booted)return;booted=true;
   try{state.currentPersonId=localStorage.getItem(LS_CURRENT_PERSON)||null;}catch(e){}
-  try{dbApi=(window.claude&&window.claude.use)?await window.claude.use('db'):null;}catch(e){dbApi=null;}
+  try{dbApi=await window.__ironlogFirebaseReady;}catch(e){dbApi=null;}
   if(dbApi){
     let seedChecked=false;
     dbApi.collection('people').onSnapshot(snap=>{
