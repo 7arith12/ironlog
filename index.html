@@ -23,7 +23,9 @@
   --crit:#a3402c;
   --crit-soft:rgba(163,64,44,0.13);
   --m-legs:#7a5a8c;
+  --m-legs-soft:rgba(122,90,140,0.14);
   --m-core:#2c7a76;
+  --m-core-soft:rgba(44,122,118,0.14);
   --on-accent:#fff8f0;
   --shadow:0 1px 2px rgba(20,20,18,.06), 0 10px 28px -14px rgba(20,20,18,.22);
   --font-display:'Big Shoulders Display',system-ui,sans-serif;
@@ -53,7 +55,9 @@
     --crit:#d97a63;
     --crit-soft:rgba(217,122,99,0.15);
     --m-legs:#b58fc9;
+    --m-legs-soft:rgba(181,143,201,0.18);
     --m-core:#59b3ad;
+    --m-core-soft:rgba(89,179,173,0.18);
     --on-accent:#1c1206;
     --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 36px -16px rgba(0,0,0,.6);
   }
@@ -80,7 +84,9 @@
   --crit:#d97a63;
   --crit-soft:rgba(217,122,99,0.15);
   --m-legs:#b58fc9;
+  --m-legs-soft:rgba(181,143,201,0.18);
   --m-core:#59b3ad;
+  --m-core-soft:rgba(89,179,173,0.18);
   --on-accent:#1c1206;
   --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 36px -16px rgba(0,0,0,.6);
 }
@@ -178,8 +184,12 @@ details[open] .chev{transform:rotate(90deg);}
 .chart{width:100%;overflow-x:auto;}
 .chart svg text{font-family:var(--font-mono);fill:var(--text-dim);}
 
-.merge-grid{display:grid;gap:4px;align-items:center;}
-.merge-grid .mg-cell{text-align:center;min-height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);padding-bottom:4px;}
+.cal-day{position:relative;aspect-ratio:1;border-radius:9px;display:flex;align-items:center;justify-content:center;}
+.cal-day-num{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text);}
+.cal-day-dot{position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;}
+.cal-day-extra{position:absolute;top:3px;right:4px;font-size:8px;font-weight:700;color:var(--text-faint);}
 
 @media (max-width:760px){
   .shell{flex-direction:column;}
@@ -299,6 +309,7 @@ function fmtMonthYear(iso){const p=iso.split('-').map(Number);const dt=new Date(
 function fmtTime(iso){return new Date(iso).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});}
 function greeting(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
 function muscleColor(g){return {Chest:'var(--accent)',Back:'var(--accent-2)',Shoulders:'var(--warn)',Arms:'var(--good)',Legs:'var(--m-legs)',Core:'var(--m-core)'}[g]||'var(--text-dim)';}
+function muscleSoftColor(g){return {Chest:'var(--accent-soft)',Back:'var(--accent-2-soft)',Shoulders:'var(--warn-soft)',Arms:'var(--good-soft)',Legs:'var(--m-legs-soft)',Core:'var(--m-core-soft)'}[g]||'var(--surface-2)';}
 function personColor(p){return p?PERSON_COLORS[p.colorIndex%PERSON_COLORS.length]:'var(--text-dim)';}
 function personById(id){return people.find(p=>p.id===id)||null;}
 function allExercises(){return DEFAULT_EXERCISES.concat(customExercises);}
@@ -430,14 +441,26 @@ function monthKeyOf(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStar
 function currentMonthKey(){return monthKeyOf(new Date());}
 function monthKeyAt(offset){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+offset);return monthKeyOf(d);}
 function lastMonthKeys(n){const arr=[];for(let i=0;i<n;i++)arr.push(monthKeyAt(-i));return arr;}
-function monthDates(monthKey){
+function calendarCells(monthKey){
   const p=monthKey.split('-').map(Number),y=p[0],m=p[1];
+  const first=new Date(y,m-1,1);
+  const leadOffset=(first.getDay()===0?6:first.getDay()-1);
   const daysInMonth=new Date(y,m,0).getDate();
-  const days=[];
-  for(let d=1;d<=daysInMonth;d++){days.push(y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'));}
-  return days;
+  const cells=[];
+  for(let i=0;i<leadOffset;i++)cells.push(null);
+  for(let d=1;d<=daysInMonth;d++)cells.push(y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
+  return cells;
 }
 function fmtMonthLabel(monthKey){const p=monthKey.split('-').map(Number);return new Date(p[0],p[1]-1,1).toLocaleDateString(undefined,{month:'short',year:'numeric'});}
+function calDayCell(dateStr,muscles,isToday){
+  if(!dateStr)return '<div></div>';
+  const dayNum=+dateStr.slice(-2);
+  const has=muscles.length>0;
+  const fill=has?muscleSoftColor(muscles[0]):'var(--surface-2)';
+  const extra=has?muscles.length-1:0;
+  const ring=isToday?'box-shadow:inset 0 0 0 2px var(--accent-strong);':'';
+  return '<div class="cal-day" title="'+esc(muscles.join(', '))+'" style="background:'+fill+';'+ring+'"><span class="cal-day-num">'+dayNum+'</span>'+(has?'<span class="cal-day-dot" style="background:'+muscleColor(muscles[0])+';"></span>':'')+(extra>0?'<span class="cal-day-extra">+'+extra+'</span>':'')+'</div>';
+}
 function musclesForPersonOnDate(personId,dateStr){
   const set=new Set();
   for(const s of sessions){
@@ -792,26 +815,20 @@ function renderMergeCard(){
   const monthKey=state.mergeMonthKey||currentMonthKey();
   const isCurrentMonth=monthKey===currentMonthKey();
   const months=lastMonthKeys(12);
-  const monthTabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px;">'+months.map(mk=>{
+  const monthTabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px;">'+months.map(mk=>{
     const active=mk===monthKey;
     return '<button class="chip" data-action="select-merge-month" data-month="'+mk+'" style="flex-shrink:0;'+(active?'border-color:var(--accent);color:var(--accent-strong);':'')+'">'+fmtMonthLabel(mk)+'</button>';
   }).join('')+'</div>';
-  const days=monthDates(monthKey);
+  const legend='<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">'+MUSCLE_GROUPS.map(g=>'<span class="small muted" style="display:inline-flex;align-items:center;gap:5px;"><span class="cat-dot" style="background:'+muscleColor(g)+';"></span>'+g+'</span>').join('')+'</div>';
+  const cells=calendarCells(monthKey);
   const today=todayISO();
-  const dayLabel=d=>String(+d.slice(-2));
-  const cols='96px repeat('+days.length+', minmax(28px, 1fr))';
-  const header='<div class="merge-grid" style="grid-template-columns:'+cols+';"><div></div>'+days.map(d=>'<div class="small muted mg-cell" style="font-weight:600;'+(d===today?'color:var(--accent-strong);':'')+'">'+dayLabel(d)+(d===today?' •':'')+'</div>').join('')+'</div>';
-  const rows=people.map(p=>{
-    const cells=days.map(d=>{
-      const muscles=musclesForPersonOnDate(p.id,d);
-      if(!muscles.length)return '<div class="mg-cell small" style="color:var(--text-faint);">—</div>';
-      const shown=muscles.slice(0,1),extra=muscles.length-shown.length;
-      return '<div class="mg-cell" title="'+muscles.map(esc).join(', ')+'">'+shown.map(g=>'<span style="font-size:9px;font-weight:700;color:'+muscleColor(g)+';">'+g.slice(0,3)+'</span>').join('')+(extra>0?'<span style="font-size:8px;" class="muted">+'+extra+'</span>':'')+'</div>';
-    }).join('');
-    return '<div class="merge-grid" style="grid-template-columns:'+cols+';padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;gap:6px;"><span class="cat-dot" style="background:'+personColor(p)+';"></span><span class="small" style="font-weight:600;">'+esc(p.name)+'</span></div>'+cells+'</div>';
+  const dowHeader='<div class="cal-grid" style="margin-bottom:2px;">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>'<div class="cal-dow">'+d+'</div>').join('')+'</div>';
+  const calendars=people.map((p,idx)=>{
+    const grid=cells.map(d=>calDayCell(d,d?musclesForPersonOnDate(p.id,d):[],d===today)).join('');
+    return '<div style="'+(idx>0?'margin-top:20px;':'')+'"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span class="cat-dot" style="background:'+personColor(p)+';"></span><span class="small" style="font-weight:600;">'+esc(p.name)+'</span></div><div class="cal-grid">'+grid+'</div></div>';
   }).join('');
   const suggestion=(isCurrentMonth&&people.length>=2)?suggestTogetherToday():null;
-  return '<div class="card"><div class="card-head"><div class="card-title">Training Calendar</div><div class="small muted">'+fmtMonthLabel(monthKey)+' · what each of you has trained, day by day</div></div>'+monthTabs+'<div style="overflow-x:auto;"><div style="min-width:'+(96+days.length*30)+'px;">'+header+rows+'</div></div>'+(suggestion?'<div class="banner" style="margin-top:14px;"><span>'+suggestion+'</span></div>':'')+'</div>';
+  return '<div class="card"><div class="card-head"><div class="card-title">Training Calendar</div><div class="small muted">'+fmtMonthLabel(monthKey)+'</div></div>'+monthTabs+legend+dowHeader+calendars+(suggestion?'<div class="banner" style="margin-top:16px;"><span>'+suggestion+'</span></div>':'')+'</div>';
 }
 function renderProgress(){
   if(!people.length)return '<div class="page-sub">Add someone to start tracking progress.</div>';
